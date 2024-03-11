@@ -15,7 +15,6 @@ import os
 import json
 import datetime
 import sys
-from IPython import get_ipython
 import numpy as np
 import openpyxl
 from openpyxl import Workbook
@@ -237,8 +236,11 @@ def main():
         print("Excel file saved successfully.")
 
     except Exception as e:
-        print("An error occurred:", e)
-
+        # Write the error message to a file
+        with open("error_log.txt", "w") as f:
+            f.write(str(e))
+        # Print a message indicating where the error log file is located
+        print("An error occurred. Check error_log.txt for details.")
+        
 if __name__ == "__main__":
     main()
-
