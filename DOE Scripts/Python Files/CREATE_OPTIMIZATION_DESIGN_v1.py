@@ -3,7 +3,7 @@
 
 # ## IMPORT LIBRARIES
 
-# In[7]:
+# In[3]:
 
 
 # Import necessary libraries
@@ -16,7 +16,7 @@ from pyDOE2 import bbdesign
 
 # ## CREATE BOX-BEHNKEN DESIGN PLAN
 
-# In[8]:
+# In[4]:
 
 
 # Function to generate a DataFrame with factor names, high, low, and mid levels
@@ -40,7 +40,7 @@ def generate_factor_levels_df(factors, high_levels, low_levels):
     return df
 
 # Function to generate a Box-Behnken design DataFrame
-def generate_bb_design(factor_df, center_points=0):
+def generate_bb_design(factor_df, center_points=3):
     """
     Generate a Box-Behnken design DataFrame based on specified factors and center points.
 
@@ -74,17 +74,29 @@ def generate_bb_design(factor_df, center_points=0):
     return df
 
 # Define the custom mapping function
-def custom_mapping(value):
+def custom_mapping(value, levels):
     """
     Custom mapping function to transform values according to specific rules.
 
     Args:
     - value (int): Value representing factor level.
+    - levels (int): Number of levels for the factor.
 
     Returns:
     - mapped_value (float): Transformed value.
     """
-    return value
+    # Check if the value is within the valid range of levels
+    if value < 0 or value >= levels:
+        return value  # Value outside the defined levels, return as is
+
+    # Calculate the spacing between each level
+    spacing = 2 / (levels - 1)
+
+    # Map the value to the corresponding value in the range [-1, 1]
+    mapped_value = -1 + value * spacing
+
+    return mapped_value
+
 
 # Function to handle user input
 def get_user_input():
