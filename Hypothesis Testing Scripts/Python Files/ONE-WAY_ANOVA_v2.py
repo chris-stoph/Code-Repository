@@ -179,3 +179,5 @@ def main():
 if __name__ == "__main__":
     main()
 
+# Add code to wait for user input before exiting
+input("Press Enter to exit...")
