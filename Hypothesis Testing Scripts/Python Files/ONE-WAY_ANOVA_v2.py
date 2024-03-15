@@ -76,6 +76,7 @@ def perform_one_way_anova(df, group_cols):
                                  'group': np.repeat(group_cols, [len(df[col]) for col in group_cols])})
         model = sm.formula.ols('data ~ C(group)', data=df_anova).fit()
 
+        
         # Generate ANOVA Table
         anova_table = sm.stats.anova_lm(model, typ=2)
 
