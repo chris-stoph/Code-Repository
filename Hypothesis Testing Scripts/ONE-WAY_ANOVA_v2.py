@@ -3,21 +3,22 @@
 
 # # IMPORT LIBRARIES
 
-# In[ ]:
+# In[7]:
 
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from tkinter import Tk, simpledialog, filedialog
 from scipy import stats
 from scipy.stats import norm
 from tabulate import tabulate
+from tkinter import Tk, filedialog, simpledialog, messagebox
+import statsmodels.api as sm
 
 
 # # EXTRACT DATA AND PERFORM TEST
 
-# In[ ]:
+# In[10]:
 
 
 def read_excel_file(file_path):
@@ -50,6 +51,48 @@ def calculate_summary_stats(df, group_cols):
         summary_data.append([col, sample_size, group_sum, group_mean, group_std, group_var, lci, uci])
     return summary_data
 
+
+def perform_one_way_anova(df, group_cols):
+    """Performs one-way ANOVA and displays summary statistics, box plot, histogram, and ANOVA results."""
+    try:
+        # Prepare data for ANOVA
+        data = [df[col] for col in group_cols]
+
+        # Summary Statistics
+        summary_data = calculate_summary_stats(df, group_cols)
+        
+        # Print Summary Statistics Table
+        print("\nSummary Statistics:")
+        print(tabulate(summary_data, headers=["Groups", "Sample Size", "Sum", "Mean", "Std Dev", "Variance", "LCI", "UCI"], tablefmt="grid"))
+
+        # Plot Box Plot
+        plot_boxplot(df, group_cols)
+
+        # Plot Histogram
+        plot_histogram(df, group_cols)
+
+        # Perform one-way ANOVA using OLS model
+        df_anova = pd.DataFrame({'data': np.concatenate(data),
+                                 'group': np.repeat(group_cols, [len(df[col]) for col in group_cols])})
+        model = sm.formula.ols('data ~ C(group)', data=df_anova).fit()
+
+        # Generate ANOVA Table
+        anova_table = sm.stats.anova_lm(model, typ=2)
+
+        # Print ANOVA Table
+        print("\nANOVA Results:")
+        print(anova_table)
+
+        # Interpret the results
+        alpha = 0.05  # significance level
+        p_value = anova_table['PR(>F)']['C(group)']
+        if p_value < alpha:
+            print("\nReject the null hypothesis: There is a significant difference between at least two groups.")
+        else:
+            print("\nFail to reject the null hypothesis: There is no significant difference between groups.")
+
+    except Exception as e:
+        print(f"Error performing one-way ANOVA: {e}")
 
 def plot_boxplot(df, group_cols):
     """Plot box plots for each group."""
@@ -85,46 +128,6 @@ def plot_histogram(df, group_cols):
     plt.grid(True)
     plt.show()
 
-def perform_one_way_anova(df, group_cols):
-    """Performs one-way ANOVA and displays summary statistics, box plot, histogram, and ANOVA results."""
-    try:
-        # Prepare data for ANOVA
-        data = [df[col] for col in group_cols]
-
-        # Summary Statistics
-        summary_data = calculate_summary_stats(df, group_cols)
-        
-        # Print Summary Statistics Table
-        print("\nSummary Statistics:")
-        print(tabulate(summary_data, headers=["Groups", "Sample Size", "Sum", "Mean", "Std Dev", "Variance", "LCI", "UCI"], tablefmt="grid"))
-
-        # Plot Box Plot
-        plot_boxplot(df, group_cols)
-
-        # Plot Histogram
-        plot_histogram(df, group_cols)
-
-        # Perform one-way ANOVA
-        f_stat, p_value = stats.f_oneway(*data)
-
-        # Prepare data for ANOVA table
-        alpha = 0.05  # significance level
-        anova_data = [
-            [alpha, round(f_stat, 3), round(p_value, 3), stats.f.ppf(0.95, len(group_cols) - 1, len(df) - len(group_cols))],
-            ]
-
-        # Print ANOVA Table
-        print("\nANOVA Results:")
-        print(tabulate(anova_data, headers=["Significance Level", "F statistic", "P-value", "F crit"], tablefmt="grid"))
-
-        # Interpret the results
-        if p_value < alpha:
-            print("\nReject the null hypothesis: There is a significant difference between at least two groups.")
-        else:
-            print("\nFail to reject the null hypothesis: There is no significant difference between groups.")
-
-    except Exception as e:
-        print(f"Error performing one-way ANOVA: {e}")
 
 def get_user_column_selection(df):
     """Gets user input for selecting columns using dialog boxes."""
