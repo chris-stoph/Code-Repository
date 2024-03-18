@@ -16,7 +16,6 @@ import tkinter as tk
 import matplotlib.pyplot as plt
 import numpy as np
 from tabulate import tabulate
-import scienceplots
 
 
 # # PLOTS STYLE
