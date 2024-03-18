@@ -23,7 +23,6 @@ from tabulate import tabulate
 # In[ ]:
 
 
-plt.style.use(['science', 'grid', 'notebook'])
 
 # Set line color
 trendline_color = 'black'
