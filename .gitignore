@@ -1,0 +1,10 @@
+/Hypothesis Testing Scripts/Python Files/dist
+/Hypothesis Testing Scripts/Python Files/build
+/DOE Scripts/Python Files/dist
+/DOE Scripts/Python Files/build
+/Hypothesis Testing/Python Files/dist
+/Hypothesis Testing/Python Files/build
+/DOE Scripts/Python Files/dist
+/DOE Scripts/Python Files/build
+*.pkg
+*.exe
