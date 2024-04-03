@@ -1,7 +1,0 @@
-Sample Size Calculation Report
-
-Confidence Level: 95%
-Margin of Error: 0.05
-Data Type: discrete
-Expected Proportion: 0.95
-Minimum Sample Size Needed: 52
