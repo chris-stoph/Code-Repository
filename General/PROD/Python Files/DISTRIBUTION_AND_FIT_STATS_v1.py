@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[3]:
+# In[1]:
 
 
 import pandas as pd
@@ -10,7 +10,10 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 import matplotlib.pyplot as plt
 import seaborn as sns
+import scipy
 from scipy import stats
+import math
+import traceback
 
 # Global variables
 df = None
@@ -22,19 +25,19 @@ def read_excel_file(file_path):
     """Reads an Excel file and returns a DataFrame."""
     try:
         global df, columns
-        df = pd.read_excel(file_path)  # Read Excel file into a DataFrame
-        columns = df.columns.tolist()  # Get column names
-        return df  # Return the DataFrame
+        df = pd.read_excel(file_path)
+        columns = df.columns.tolist()
+        return df
     except Exception as e:
         print(f"Error reading Excel file: {e}")
         return None
 
-def plot_histogram(column):
+# Function to plot histogram for a selected column
+def plot_histogram(column, num_bins=8):
     """Plots histogram for the selected column."""
     try:
-        # Plot distribution
         plt.figure(figsize=(8, 6))
-        sns.histplot(df[column], kde=True, color='blue', stat='density')
+        sns.histplot(df[column], kde=True, color='blue', stat='density', bins=num_bins)
         plt.title(f'Distribution of {column}')
         plt.xlabel(column)
         plt.ylabel('Density')
@@ -42,193 +45,174 @@ def plot_histogram(column):
     except Exception as e:
         print(f"Error plotting histogram: {e}")
 
-def plot_qq_plot(data, dist, params, ax):
-    """Plot Q-Q plot for a given distribution."""
-    # Generate sorted data for Q-Q plot
-    sorted_data = np.sort(data)
+# Function to plot Q-Q plot for a specified distribution
+def plot_qq_plot(data, dist, ax):
+    """Plot Q-Q plot for the specified distribution."""
+    try:
+        if dist == 'weibull_min':
+            dist_object = getattr(stats, dist)
+            params = dist_object.fit(data, floc=0)
+            stats.probplot(data, dist=dist_object, sparams=params[1:], plot=ax)
+        else:
+            dist_object = getattr(stats, dist)
+            stats.probplot(data, dist=dist_object, plot=ax)
+        ax.set_title(f'Q-Q Plot for {dist.capitalize()} Distribution')
+        ax.set_xlabel('Theoretical Quantiles')
+        ax.set_ylabel('Ordered Values')
+        ax.grid(True)
+    except Exception as e:
+        traceback.print_exc()
 
-    # Plot Q-Q plot
-    stats.probplot(data, dist=dist, sparams=params, plot=ax)
-    ax.set_title(f'{dist.name} Q-Q Plot')
-    ax.set_xlabel('Theoretical Quantiles')
-    ax.set_ylabel('Ordered Values')
-
-    # Add a line representing the theoretical quantiles
-    xmin, xmax = ax.get_xlim()
-    ymin, ymax = ax.get_ylim()
-    min_val = min(xmin, ymin)
-    max_val = max(xmax, ymax)
-    ax.plot([min_val, max_val], [min_val, max_val], color='red', linestyle='--')
 
 
-def plot_ecdf(data, dist, params, ax):
-    """Plot ECDF for a given distribution."""
-    # Generate sorted data for ECDF
-    sorted_data = np.sort(data)
-
-    # Plot ECDF
-    ax.plot(sorted_data, np.arange(1, len(sorted_data) + 1) / len(sorted_data), label='Empirical CDF')
-    if dist.name == 'boxcox':
-        cdf = stats.norm.cdf(sorted_data, *params)
-    else:
-        cdf = dist.cdf(sorted_data, *params[:-2], loc=params[-2], scale=params[-1])
-    ax.plot(sorted_data, cdf, label=f'{dist.name} CDF')
-    ax.set_title(f'{dist.name} ECDF Plot')
-    ax.set_xlabel('Data')
-    ax.set_ylabel('Cumulative Probability')
-    ax.legend()
-
+# Function to fit common distributions to the selected column and evaluate goodness-of-fit
 def fit_distributions(column):
     """Fits common distributions to the selected column and evaluates goodness-of-fit."""
     try:
         data = df[column].dropna()
-
-        # Fit common distributions including Johnson transformation
-        distributions = ['norm', 'expon', 'gamma', 'lognorm', 'beta', 'johnsonsu', 'weibull_min']
+        if len(data) == 0:
+            print("Error: Selected column has no data.")
+            return None, None
+        
+        distributions = ['norm', 'expon', 'logistic', 'gumbel_l', 'gumbel_r', 'weibull_min']
         results = {}
-
         for dist_name in distributions:
-            if dist_name == 'johnsonsu':
-                params = stats.johnsonsu.fit(data)
-                dist = stats.johnsonsu
-            elif dist_name == 'weibull_min':
-                params = stats.weibull_min.fit(data)
+            if dist_name == 'weibull_min':
                 dist = stats.weibull_min
-            elif dist_name == 'boxcox':
-                data_transformed, _ = stats.boxcox(data)
-                params = tuple()  # Box-Cox has no parameters to fit
-                dist = stats.norm  # Box-Cox is often compared with normal distribution
+                params = dist.fit(data, floc=0)
             else:
                 dist = getattr(stats, dist_name)
                 params = dist.fit(data)
-
-            # Perform Kolmogorov-Smirnov test for goodness-of-fit
-            D, p_value = stats.kstest(data, dist_name, args=params)
-
-            results[dist_name] = {'params': params, 'D': D, 'p_value': p_value, 'dist': dist}
-
-        return results
+            result = stats.anderson(data, dist_name)
+            crit_values = result.critical_values
+            sig_levels = result.significance_level
+            results[dist_name] = {'params': params, 'AD_statistic': result.statistic, 'critical_values': crit_values, 'significance_levels': sig_levels}
+        return distributions, results
     except Exception as e:
         print(f"Error fitting distributions: {e}")
-        return None
+        traceback.print_exc()
+        return None, None
 
+
+# Main function to create GUI window and handle user interactions
 def main():
-    global df, window
+    try:
+    
+        global df, window
 
-    # Create GUI window
-    window = tk.Tk()
-    window.title("Distribution Fitting")
+        window = tk.Tk()
+        window.title("Distribution Fitting")
 
-    # Open a file dialog to select Excel file
-    def open_file_dialog():
-        file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")])
-        if file_path:
-            # Read Excel file into DataFrame
-            df = read_excel_file(file_path)
-            if df is not None:
-                show_column_selection()
+        def open_file_dialog():
+            file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")])
+            if file_path:
+                df = read_excel_file(file_path)
+                if df is not None:
+                    show_column_selection()
 
-    # Show file selection button
-    file_button = tk.Button(window, text="Select Excel File", command=open_file_dialog)
-    file_button.pack(pady=20)
+        file_button = tk.Button(window, text="Select Excel File", command=open_file_dialog)
+        file_button.pack(pady=20)
 
-    # Function to show column selection
-    def show_column_selection():
-        # Clear existing widgets
-        for widget in window.winfo_children():
-            widget.destroy()
+        def show_column_selection():
+            for widget in window.winfo_children():
+                widget.destroy()
 
-        # Label for column selection
-        label = tk.Label(window, text="Select Column:")
-        label.pack(pady=10)
+            label = tk.Label(window, text="Select Column:")
+            label.pack(pady=10)
 
-        # Dropdown for column selection
-        global combo
-        combo = ttk.Combobox(window, values=columns)
-        combo.pack(pady=10)
+            global combo
+            combo = ttk.Combobox(window, values=columns)
+            combo.pack(pady=10)
 
-        # Analyze button
-        analyze_button = tk.Button(window, text="Analyze", command=analyze_data)
-        analyze_button.pack(pady=10)
+            analyze_button = tk.Button(window, text="Analyze", command=analyze_data)
+            analyze_button.pack(pady=10)
 
-    def analyze_data():
-        """Callback function to analyze data."""
-        # Get selected column
-        selected_column = combo.get()
+        def analyze_data():
+            selected_column = combo.get()
+            descriptive_stats = df[selected_column].describe()
+            print("=" * 80)
+            print(" " * 30 + f"Descriptive Statistics for {selected_column}")
+            print("=" * 80)
+            print(descriptive_stats)
+            print("\n\n")
+            print("The descriptive statistics provide a summary of the central tendency, dispersion, and shape of the distribution of data.")
+            print("Here are the key values and their interpretations:")
+            print(" ~ count: Number of non-missing observations in the dataset.")
+            print(" ~ mean: Average value of the data.")
+            print(" ~ std: Standard deviation, which measures the dispersion of data points around the mean.")
+            print(" ~ min: Minimum value in the dataset.")
+            print(" ~ 25%: Lower quartile or first quartile, representing the value below which 25% of the data fall.")
+            print(" ~ 50%: Median or second quartile, representing the middle value of the dataset.")
+            print(" ~ 75%: Upper quartile or third quartile, representing the value below which 75% of the data fall.")
+            print(" ~ max: Maximum value in the dataset.")
+            print("Interpretation: These statistics help understand the distribution of the data and identify any outliers or skewness.")
+            print("=" * 80)
+            print("\n\n\n")
+            plot_histogram(selected_column)
 
-        # Calculate descriptive statistics
-        descriptive_stats = df[selected_column].describe()
-        
-        # Print descriptive statistics
-        print(f"\n\n\n=========================================== Descriptive Statistics for {selected_column} ===========================================")
-        print("The descriptive statistics provide a summary of the central tendency, dispersion, and shape of the distribution of data.\n"
-            "Here are the key values and their interpretations:\n"
-            " ~ count: Number of non-missing observations in the dataset.\n"
-            " ~ mean: Average value of the data.\n"
-            " ~ std: Standard deviation, which measures the dispersion of data points around the mean.\n"
-            " ~ min: Minimum value in the dataset.\n"
-            " ~ 25%: Lower quartile or first quartile, representing the value below which 25% of the data fall.\n"
-            " ~ 50%: Median or second quartile, representing the middle value of the dataset.\n"
-            " ~ 75%: Upper quartile or third quartile, representing the value below which 75% of the data fall.\n"
-            " ~ max: Maximum value in the dataset.\n"
-            "Interpretation: These statistics help understand the distribution of the data and identify any outliers or skewness.\n"
-            "For example, a large standard deviation indicates high variability, while a small standard deviation indicates low variability.\n\n")
-
-        print(descriptive_stats)
-        
-        # Plot histogram
-        plot_histogram(selected_column)
-
-        # Fit distributions
-        results = fit_distributions(selected_column)
-        print("==========================================================================================================================")
-        # Print goodness-of-fit test results
-        if results:
-            print(f"\n\n\n=========================================== Goodness-of-Fit Test Results for {selected_column} ===========================================")
-            print("{:<15} {:<30} {:<15} {:<15}".format('Distribution', 'Parameters', 'D-Statistic', 'P-Value'))
-
-            # Create a new figure for Q-Q plots
-            fig_qq, axs_qq = plt.subplots(3, 3, figsize=(16, 16))
-
-            # Create a new figure for ECDF plots
-            fig_ecdf, axs_ecdf = plt.subplots(3, 3, figsize=(16, 16))
-
-            for i, (dist_name, result) in enumerate(results.items()):
-                params_str = ', '.join([f"{param:.1f}" for param in result['params']])
-                print("{:<15} {:<30} {:<15.3f} {:<15.3f}".format(dist_name, params_str, result['D'], result['p_value']))
-
-                # Plot Q-Q plot
-                plot_qq_plot(df[selected_column], result['dist'], result['params'], axs_qq[i // 3, i % 3])
-
-                # Plot ECDF
-                plot_ecdf(df[selected_column], result['dist'], result['params'], axs_ecdf[i // 3, i % 3])
-            print("====================================================================================================================")
+            print("\n\n\n")
+            print("=" * 80)
+            print("Q-Q Plot".center(80))
+            print("=" * 80)
+            print("A Q-Q plot (quantile-quantile plot) is a graphical method for comparing two probability distributions by plotting")
+            print("their quantiles against each other. The points should approximately lie on the straight line. If they do, it suggests")
+            print("that the two distributions are similar.")
+            print("=" * 80)
             
-            print("\n\n\n===================================================== Q-Q Plot =====================================================")
-            print("A Q-Q plot (quantile-quantile plot) is a graphical method for comparing two probability distributions by plotting\n"
-                "their quantiles against each other. The points should approximately lie on the straight line. If they do, it suggests\n"
-                "that the two distributions are similar.")
-            print("====================================================================================================================")
-            print("\n\n\n==================================================== ECDF Plot =====================================================")
-            print("An empirical cumulative distribution function (ECDF) plot is a non-parametric way to represent the cumulative\n"
-                "distribution function of a sample.\n"
-                " ~ The ECDF plot provides a visual comparison between the observed data and the theoretical distribution.\n"
-                " ~ If the empirical cumulative distribution closely aligns with the cumulative distribution function (CDF) of a theoretical distribution, \n"
-                "   it suggests that the observed data follows the same distributional pattern as the theoretical one.\n"
-                " ~ The closer the alignment between the empirical and theoretical CDFs, the better the fit of the theoretical distribution to the observed data.")
-            print("====================================================================================================================")
-            print("\n\n\n=============================================== Goodness-of-Fit Test ===============================================")
-            print("The goodness-of-fit test measures how well a probability distribution fits a set of observations. The D-Statistic\n"
-                "measures the maximum absolute difference between the empirical distribution function of the sample and the cumulative\n"
-                "distribution function of the theoretical distribution. The P-Value indica tes the probability of observing a D-Statistic\n"
-                "as extreme as the one computed if the null hypothesis (the data follows the specified distribution) is true.")
-            print("====================================================================================================================")
-            plt.tight_layout()
-            plt.show()
-        else:
-            print("No results.")
+            if selected_column:
+                selected_data = df[selected_column].dropna()
+                distributions, results = fit_distributions(selected_column)
+                        
+                num_plots = len(distributions)
+                num_cols = 3
+                num_rows = math.ceil(num_plots / num_cols)
 
-    window.mainloop()
+                fig_qq, axes_qq = plt.subplots(num_rows, num_cols, figsize=(15, 5*num_rows))
+                        
+                for i, dist_name in enumerate(distributions):
+                    row = i // num_cols
+                    col = i % num_cols
+                    ax_qq = axes_qq[row, col] if num_plots > 1 else axes_qq
+
+                    if selected_column and dist_name in results:
+                        plot_qq_plot(selected_data, dist_name, ax_qq)
+                        ax_qq.set_title(f'Q-Q Plot for {dist_name.capitalize()} Distribution')
+                        ax_qq.set_xlabel('Theoretical Quantiles')
+                        ax_qq.set_ylabel('Ordered Values')
+                        ax_qq.grid(True)
+                
+                plt.tight_layout()
+                plt.show()
+
+            print("\n\n\n")
+            print("=" * 80)
+            print("Goodness-of-Fit (Anderson-Darling)".center(80))
+            print("=" * 80)
+            
+
+            if results:
+
+                print("{:<15} {:<15} {:<40} {:<40}".format('Distribution', 'AD Statistic', 'Critical Values', 'Significance Levels'))
+
+                for dist_name, result in results.items():
+                    crit_values_str = ', '.join([f"{crit_val:.2f}" for crit_val in result['critical_values']])
+                    sig_levels_str = ', '.join([f"{sig_level:.2f}" for sig_level in result['significance_levels']])
+                    print("{:<15} {:<15f} {:<40} {:<40}".format(dist_name, result['AD_statistic'], crit_values_str, sig_levels_str))
+                print("\n")
+                print("The Anderson-Darling test measures the goodness-of-fit of a sample to a specified distribution. It evaluates the null hypothesis")
+                print("that the data follows the specified distribution. The AD Statistic is compared with critical values at different significance levels.")
+                print("If the AD Statistic is greater than the critical value, the null hypothesis is rejected, indicating a poor fit.")
+                print("The lower the AD Statistic, the better the fit of the distribution to the data.")
+                print("=" * 80)
+
+            else:
+                print("No results.")
+
+        window.mainloop()
+
+    except Exception as e:
+            print(f"An error occurred: {e}")
+            traceback.print_exc()
 
 if __name__ == "__main__":
     main()
